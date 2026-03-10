@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insta Image Optimizer</title>
+    <style>
+      :root {
+        --bg: #eef3f9;
+        --card: #ffffff;
+        --line: #d8e2ef;
+        --text: #132238;
+        --muted: #5f728b;
+        --brand: #0e7490;
+        --brand-dark: #0b5f75;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 5% 10%, #dbeafe 0%, transparent 30%),
+          radial-gradient(circle at 90% 0%, #cffafe 0%, transparent 28%),
+          var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "Inter", Arial, sans-serif;
+      }
+      .container {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px 14px 26px;
+      }
+      .hero {
+        margin-bottom: 14px;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(1.4rem, 2.4vw, 2.1rem);
+      }
+      .hero p {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 14px;
+      }
+      .card {
+        background: color-mix(in srgb, var(--card) 92%, #ffffff);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 8px 24px rgba(16, 40, 70, 0.06);
+      }
+      .section-title {
+        font-size: 0.93rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        margin: 0 0 10px;
+      }
+      .upload-zone {
+        border: 1px dashed #9fb3c8;
+        border-radius: 12px;
+        padding: 14px;
+        background: #f8fbff;
+      }
+      .upload-zone input[type="file"] {
+        width: 100%;
+      }
+      .controls {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: end;
+      }
+      .field label {
+        display: block;
+        font-size: 0.84rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .quality-row {
+        display: grid;
+        grid-template-columns: 1fr 78px;
+        gap: 10px;
+      }
+      input[type="range"] { width: 100%; }
+      input[type="number"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 0.95rem;
+      }
+      button {
+        border: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--brand);
+        color: #fff;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:hover { background: var(--brand-dark); }
+      button:disabled { opacity: 0.65; cursor: not-allowed; }
+      .status {
+        margin-top: 10px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+      .main-preview {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f6f9fd;
+        aspect-ratio: 4/3;
+        display: grid;
+        place-items: center;
+      }
+      .main-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .placeholder {
+        color: var(--muted);
+        font-size: 0.92rem;
+        padding: 14px;
+        text-align: center;
+      }
+      .preview-meta {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.83rem;
+      }
+      .thumb-grid {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+        gap: 8px;
+      }
+      .thumb-btn {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+        padding: 0;
+        cursor: pointer;
+      }
+      .thumb-btn.active {
+        outline: 2px solid var(--brand);
+      }
+      .thumb-btn img {
+        width: 100%;
+        aspect-ratio: 1/1;
+        object-fit: cover;
+        display: block;
+      }
+      .thumb-name {
+        padding: 4px;
+        font-size: 0.72rem;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .result-wrap { margin-top: 14px; }
+      .result-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 10px;
+      }
+      .result-card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        padding: 10px;
+      }
+      .result-head {
+        font-size: 0.85rem;
+        margin-bottom: 8px;
+      }
+      .result-ok { color: #0f766e; }
+      .result-ignored { color: #a16207; }
+      .result-fail { color: #b91c1c; }
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1.2fr;
+        gap: 8px;
+      }
+      .comparison .slot {
+        display: grid;
+        gap: 4px;
+      }
+      .comparison .slot-label {
+        font-size: 0.72rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .comparison img {
+        width: 100%;
+        aspect-ratio: 1/1;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+      }
+      .comparison .after img {
+        border: 2px solid var(--brand);
+        box-shadow: 0 6px 14px rgba(14, 116, 144, 0.15);
+      }
+      .download {
+        margin-top: 12px;
+        font-size: 0.95rem;
+      }
+      .download a {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #0e7490, #0891b2);
+        color: #ffffff;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        box-shadow: 0 10px 18px rgba(8, 145, 178, 0.28);
+      }
+      .download a::before {
+        content: "⬇";
+        font-size: 0.95rem;
+        line-height: 1;
+      }
+      .download a:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 22px rgba(8, 145, 178, 0.34);
+      }
+      .download a:active {
+        transform: translateY(0);
+      }
+
+      @media (max-width: 980px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        .controls { grid-template-columns: 1fr; }
+        .quality-row { grid-template-columns: 1fr 72px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="hero">
+        <h1>Image Compressor</h1>
+        <p>Compress images with high visual quality and verify the exact file before processing.</p>
+      </header>
+
+      <section class="layout">
+        <article class="card">
+          <h2 class="section-title">1) Upload And Quality</h2>
+          <div class="upload-zone">
+            <input id="files" type="file" multiple accept=".jpg,.jpeg,.png,.webp" />
+          </div>
+
+          <div class="controls">
+            <div class="field">
+              <label for="quality">Quality (recommended 88-94)</label>
+              <div class="quality-row">
+                <input id="qualityRange" type="range" min="1" max="100" value="90" />
+                <input id="quality" type="number" min="1" max="100" value="90" />
+              </div>
+            </div>
+            <button id="run">Compress</button>
+          </div>
+
+          <p id="status" class="status">Ready.</p>
+          <p id="download" class="download"></p>
+        </article>
+
+        <article class="card">
+          <h2 class="section-title">2) Selected Image Preview</h2>
+          <div class="main-preview" id="mainPreview">
+            <div class="placeholder">Select images to preview them here.</div>
+          </div>
+          <div id="previewMeta" class="preview-meta"></div>
+          <div id="selectedPreview" class="thumb-grid"></div>
+        </article>
+      </section>
+
+      <section class="card result-wrap">
+        <h2 class="section-title">3) Results (Before / After)</h2>
+        <div id="results" class="result-grid"></div>
+      </section>
+    </div>
+
+    <script>
+      const runBtn = document.getElementById("run");
+      const filesEl = document.getElementById("files");
+      const qualityEl = document.getElementById("quality");
+      const qualityRangeEl = document.getElementById("qualityRange");
+      const statusEl = document.getElementById("status");
+      const resultsEl = document.getElementById("results");
+      const downloadEl = document.getElementById("download");
+      const selectedPreviewEl = document.getElementById("selectedPreview");
+      const mainPreviewEl = document.getElementById("mainPreview");
+      const previewMetaEl = document.getElementById("previewMeta");
+
+      const selectedPreviewMap = new Map();
+      const selectedMeta = [];
+      let currentPreviewIndex = -1;
+
+      function formatBytes(bytes) {
+        if (!bytes && bytes !== 0) return "-";
+        if (bytes < 1024) return `${bytes} B`;
+        const kb = bytes / 1024;
+        if (kb < 1024) return `${kb.toFixed(2)} KB`;
+        const mb = kb / 1024;
+        return `${mb.toFixed(2)} MB`;
+      }
+
+      function setCurrentPreview(index) {
+        if (index < 0 || index >= selectedMeta.length) return;
+        currentPreviewIndex = index;
+        const item = selectedMeta[index];
+        mainPreviewEl.innerHTML = `<img src="${item.url}" alt="${item.name}" />`;
+        previewMetaEl.textContent = `${item.name} | ${item.width}x${item.height} | ${formatBytes(item.size)}`;
+
+        const buttons = selectedPreviewEl.querySelectorAll(".thumb-btn");
+        buttons.forEach((btn, idx) => {
+          btn.classList.toggle("active", idx === index);
+        });
+      }
+
+      qualityRangeEl.addEventListener("input", () => {
+        qualityEl.value = qualityRangeEl.value;
+      });
+
+      qualityEl.addEventListener("input", () => {
+        const n = Math.max(1, Math.min(100, Number(qualityEl.value || 90)));
+        qualityEl.value = n;
+        qualityRangeEl.value = n;
+      });
+
+      filesEl.addEventListener("change", async () => {
+        selectedPreviewMap.forEach((url) => URL.revokeObjectURL(url));
+        selectedPreviewMap.clear();
+        selectedMeta.splice(0, selectedMeta.length);
+        selectedPreviewEl.innerHTML = "";
+        resultsEl.innerHTML = "";
+        downloadEl.innerHTML = "";
+
+        const fileArray = Array.from(filesEl.files || []);
+        if (!fileArray.length) {
+          mainPreviewEl.innerHTML = '<div class="placeholder">Select images to preview them here.</div>';
+          previewMetaEl.textContent = "";
+          return;
+        }
+
+        for (const file of fileArray) {
+          const objectUrl = URL.createObjectURL(file);
+          selectedPreviewMap.set(file.name, objectUrl);
+
+          const dimensions = await new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+            img.onerror = () => resolve({ width: 0, height: 0 });
+            img.src = objectUrl;
+          });
+
+          selectedMeta.push({
+            name: file.name,
+            url: objectUrl,
+            size: file.size,
+            width: dimensions.width,
+            height: dimensions.height,
+          });
+        }
+
+        selectedPreviewEl.innerHTML = selectedMeta
+          .map(
+            (item, index) => `
+              <button type="button" class="thumb-btn" data-index="${index}">
+                <img src="${item.url}" alt="${item.name}" />
+                <div class="thumb-name">${item.name}</div>
+              </button>
+            `
+          )
+          .join("");
+
+        selectedPreviewEl.querySelectorAll(".thumb-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            setCurrentPreview(Number(btn.dataset.index));
+          });
+        });
+
+        setCurrentPreview(0);
+      });
+
+      runBtn.addEventListener("click", async () => {
+        if (!filesEl.files.length) {
+          statusEl.textContent = "Select at least one image.";
+          return;
+        }
+
+        const form = new FormData();
+        for (const file of filesEl.files) form.append("files", file);
+        form.append("quality", qualityEl.value || "90");
+
+        statusEl.textContent = "Compressing images...";
+        resultsEl.innerHTML = "";
+        downloadEl.innerHTML = "";
+        runBtn.disabled = true;
+
+        try {
+          const res = await fetch("/api/optimize", { method: "POST", body: form });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || "Compression failed.");
+          }
+
+          statusEl.textContent =
+            `Processed: ${data.summary.processed}, Success: ${data.summary.success}, ` +
+            `Saved: ${data.summary.saved_percent}%`;
+
+          downloadEl.innerHTML = `<a href="${data.download_url}" download>Download Compressed ZIP</a>`;
+
+          resultsEl.innerHTML = data.results
+            .map((item) => {
+              const rowClass =
+                item.status === "success"
+                  ? "result-ok"
+                  : item.status === "ignored"
+                    ? "result-ignored"
+                    : "result-fail";
+              const originalPreview = selectedPreviewMap.get(item.input_file);
+              const before = originalPreview
+                ? `<div class="slot"><div class="slot-label">Before</div><img src="${originalPreview}" alt="before-${item.input_file}" /></div>`
+                : "<div class=\"placeholder\">No preview</div>";
+              const after = item.preview_url
+                ? `<div class="slot after"><div class="slot-label">Compressed</div><img src="${item.preview_url}" alt="after-${item.output_file ?? item.input_file}" /></div>`
+                : "<div class=\"placeholder\">No preview</div>";
+
+              return `
+                <article class="result-card">
+                  <div class="result-head">
+                    <strong>${item.input_file}</strong><br />
+                    <span>${formatBytes(item.original_size)} -> ${formatBytes(item.optimized_size)} (${item.compression_percent}%)</span><br />
+                    <span class="${rowClass}">${item.status}</span>
+                  </div>
+                  <div class="comparison">
+                    ${before}
+                    ${after}
+                  </div>
+                </article>
+              `;
+            })
+            .join("");
+        } catch (error) {
+          statusEl.textContent = `Error: ${error.message}`;
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

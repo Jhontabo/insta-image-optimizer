@@ -320,17 +320,139 @@
         return `${mb.toFixed(2)} MB`;
       }
 
+      function showEmptyMainPreview() {
+        mainPreviewEl.replaceChildren();
+        const placeholder = document.createElement("div");
+        placeholder.className = "placeholder";
+        placeholder.textContent = "Select images to preview them here.";
+        mainPreviewEl.append(placeholder);
+      }
+
       function setCurrentPreview(index) {
         if (index < 0 || index >= selectedMeta.length) return;
         currentPreviewIndex = index;
         const item = selectedMeta[index];
-        mainPreviewEl.innerHTML = `<img src="${item.url}" alt="${item.name}" />`;
+
+        mainPreviewEl.replaceChildren();
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.name;
+        mainPreviewEl.append(img);
+
         previewMetaEl.textContent = `${item.name} | ${item.width}x${item.height} | ${formatBytes(item.size)}`;
 
         const buttons = selectedPreviewEl.querySelectorAll(".thumb-btn");
         buttons.forEach((btn, idx) => {
           btn.classList.toggle("active", idx === index);
         });
+      }
+
+      function renderSelectedThumbnails() {
+        selectedPreviewEl.replaceChildren();
+        selectedMeta.forEach((item, index) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "thumb-btn";
+          btn.dataset.index = String(index);
+
+          const img = document.createElement("img");
+          img.src = item.url;
+          img.alt = item.name;
+          btn.append(img);
+
+          const name = document.createElement("div");
+          name.className = "thumb-name";
+          name.textContent = item.name;
+          btn.append(name);
+
+          btn.addEventListener("click", () => setCurrentPreview(index));
+          selectedPreviewEl.append(btn);
+        });
+      }
+
+      function buildPreviewSlot(label, src, alt, className = "") {
+        const slot = document.createElement("div");
+        slot.className = className ? `slot ${className}` : "slot";
+
+        const slotLabel = document.createElement("div");
+        slotLabel.className = "slot-label";
+        slotLabel.textContent = label;
+        slot.append(slotLabel);
+
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = alt;
+        slot.append(img);
+
+        return slot;
+      }
+
+      function buildPlaceholderSlot() {
+        const placeholder = document.createElement("div");
+        placeholder.className = "placeholder";
+        placeholder.textContent = "No preview";
+        return placeholder;
+      }
+
+      function renderResults(items) {
+        resultsEl.replaceChildren();
+        for (const item of items) {
+          const card = document.createElement("article");
+          card.className = "result-card";
+
+          const head = document.createElement("div");
+          head.className = "result-head";
+
+          const title = document.createElement("strong");
+          title.textContent = item.input_file;
+          head.append(title);
+          head.append(document.createElement("br"));
+
+          const metrics = document.createElement("span");
+          metrics.textContent =
+            `${formatBytes(item.original_size)} -> ${formatBytes(item.optimized_size)} (${item.compression_percent}%)`;
+          head.append(metrics);
+          head.append(document.createElement("br"));
+
+          const status = document.createElement("span");
+          status.className =
+            item.status === "success"
+              ? "result-ok"
+              : item.status === "ignored"
+                ? "result-ignored"
+                : "result-fail";
+          status.textContent = item.status;
+          head.append(status);
+          card.append(head);
+
+          const comparison = document.createElement("div");
+          comparison.className = "comparison";
+
+          const originalPreview = selectedPreviewMap.get(item.input_file);
+          if (originalPreview) {
+            comparison.append(
+              buildPreviewSlot("Before", originalPreview, `before-${item.input_file}`)
+            );
+          } else {
+            comparison.append(buildPlaceholderSlot());
+          }
+
+          if (item.preview_url) {
+            comparison.append(
+              buildPreviewSlot(
+                "Compressed",
+                item.preview_url,
+                `after-${item.output_file || item.input_file}`,
+                "after"
+              )
+            );
+          } else {
+            comparison.append(buildPlaceholderSlot());
+          }
+
+          card.append(comparison);
+          resultsEl.append(card);
+        }
       }
 
       qualityRangeEl.addEventListener("input", () => {
@@ -347,13 +469,13 @@
         selectedPreviewMap.forEach((url) => URL.revokeObjectURL(url));
         selectedPreviewMap.clear();
         selectedMeta.splice(0, selectedMeta.length);
-        selectedPreviewEl.innerHTML = "";
-        resultsEl.innerHTML = "";
-        downloadEl.innerHTML = "";
+        selectedPreviewEl.replaceChildren();
+        resultsEl.replaceChildren();
+        downloadEl.replaceChildren();
 
         const fileArray = Array.from(filesEl.files || []);
         if (!fileArray.length) {
-          mainPreviewEl.innerHTML = '<div class="placeholder">Select images to preview them here.</div>';
+          showEmptyMainPreview();
           previewMetaEl.textContent = "";
           return;
         }
@@ -378,23 +500,7 @@
           });
         }
 
-        selectedPreviewEl.innerHTML = selectedMeta
-          .map(
-            (item, index) => `
-              <button type="button" class="thumb-btn" data-index="${index}">
-                <img src="${item.url}" alt="${item.name}" />
-                <div class="thumb-name">${item.name}</div>
-              </button>
-            `
-          )
-          .join("");
-
-        selectedPreviewEl.querySelectorAll(".thumb-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            setCurrentPreview(Number(btn.dataset.index));
-          });
-        });
-
+        renderSelectedThumbnails();
         setCurrentPreview(0);
       });
 
@@ -409,8 +515,8 @@
         form.append("quality", qualityEl.value || "90");
 
         statusEl.textContent = "Compressing images...";
-        resultsEl.innerHTML = "";
-        downloadEl.innerHTML = "";
+        resultsEl.replaceChildren();
+        downloadEl.replaceChildren();
         runBtn.disabled = true;
 
         try {
@@ -424,45 +530,21 @@
             `Processed: ${data.summary.processed}, Success: ${data.summary.success}, ` +
             `Saved: ${data.summary.saved_percent}%`;
 
-          downloadEl.innerHTML = `<a href="${data.download_url}" download>Download Compressed ZIP</a>`;
+          const downloadLink = document.createElement("a");
+          downloadLink.href = data.download_url;
+          downloadLink.download = "";
+          downloadLink.textContent = "Download Compressed ZIP";
+          downloadEl.append(downloadLink);
 
-          resultsEl.innerHTML = data.results
-            .map((item) => {
-              const rowClass =
-                item.status === "success"
-                  ? "result-ok"
-                  : item.status === "ignored"
-                    ? "result-ignored"
-                    : "result-fail";
-              const originalPreview = selectedPreviewMap.get(item.input_file);
-              const before = originalPreview
-                ? `<div class="slot"><div class="slot-label">Before</div><img src="${originalPreview}" alt="before-${item.input_file}" /></div>`
-                : "<div class=\"placeholder\">No preview</div>";
-              const after = item.preview_url
-                ? `<div class="slot after"><div class="slot-label">Compressed</div><img src="${item.preview_url}" alt="after-${item.output_file ?? item.input_file}" /></div>`
-                : "<div class=\"placeholder\">No preview</div>";
-
-              return `
-                <article class="result-card">
-                  <div class="result-head">
-                    <strong>${item.input_file}</strong><br />
-                    <span>${formatBytes(item.original_size)} -> ${formatBytes(item.optimized_size)} (${item.compression_percent}%)</span><br />
-                    <span class="${rowClass}">${item.status}</span>
-                  </div>
-                  <div class="comparison">
-                    ${before}
-                    ${after}
-                  </div>
-                </article>
-              `;
-            })
-            .join("");
+          renderResults(data.results);
         } catch (error) {
           statusEl.textContent = `Error: ${error.message}`;
         } finally {
           runBtn.disabled = false;
         }
       });
+
+      showEmptyMainPreview();
     </script>
   </body>
 </html>

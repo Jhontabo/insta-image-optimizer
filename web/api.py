@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import shutil
+import time
 import uuid
 import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from PIL import Image, UnidentifiedImageError
 
 from core.optimizer import OptimizationResult, optimize_image
 from utils.file_utils import SUPPORTED_EXTENSIONS, is_optimized_filename
@@ -16,6 +19,11 @@ APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
 STATIC_DIR = APP_DIR / "static"
 WEB_OUTPUT_DIR = PROJECT_ROOT / "output" / "web_jobs"
+MAX_FILES_PER_REQUEST = 30
+MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+JOB_TTL_SECONDS = 24 * 60 * 60
+Image.MAX_IMAGE_PIXELS = 80_000_000
 
 app = FastAPI(title="Insta Image Optimizer API")
 
@@ -34,11 +42,11 @@ def _result_to_dict(result: OptimizationResult, job_id: str) -> dict:
     }
 
 
-def _build_failed_result(file_name: str, message: str) -> OptimizationResult:
+def _build_failed_result(file_name: str, message: str, original_size: int = 0) -> OptimizationResult:
     return OptimizationResult(
         input_path=Path(file_name),
         output_path=None,
-        original_size=0,
+        original_size=original_size,
         optimized_size=0,
         compression_percent=0.0,
         status="failed",
@@ -53,6 +61,51 @@ def _build_zip(job_output_dir: Path, zip_path: Path) -> None:
                 archive.write(file_path, arcname=file_path.name)
 
 
+def _cleanup_expired_jobs(base_dir: Path, ttl_seconds: int) -> None:
+    if not base_dir.exists():
+        return
+
+    cutoff = time.time() - ttl_seconds
+    for candidate in base_dir.iterdir():
+        try:
+            modified_at = candidate.stat().st_mtime
+        except OSError:
+            continue
+
+        if modified_at >= cutoff:
+            continue
+
+        try:
+            if candidate.is_dir():
+                shutil.rmtree(candidate)
+            elif candidate.is_file():
+                candidate.unlink()
+        except OSError:
+            continue
+
+
+def _save_upload_with_limit(upload: UploadFile, destination: Path, max_bytes: int) -> int:
+    total = 0
+    with destination.open("wb") as handle:
+        while True:
+            chunk = upload.file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(f"File exceeds max allowed size ({max_bytes // (1024 * 1024)} MB).")
+            handle.write(chunk)
+    return total
+
+
+def _validate_image_payload(path: Path) -> None:
+    try:
+        with Image.open(path) as image:
+            image.verify()
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise ValueError("Uploaded file is not a valid supported image.") from exc
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
@@ -65,8 +118,15 @@ def optimize_images(
 ) -> JSONResponse:
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
+    if len(files) > MAX_FILES_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many files. Maximum per request is {MAX_FILES_PER_REQUEST}.",
+        )
 
     quality = max(1, min(quality, 100))
+    WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    _cleanup_expired_jobs(WEB_OUTPUT_DIR, ttl_seconds=JOB_TTL_SECONDS)
 
     job_id = uuid.uuid4().hex
     job_input_dir = WEB_OUTPUT_DIR / job_id / "input"
@@ -99,8 +159,20 @@ def optimize_images(
             continue
 
         input_path = job_input_dir / f"{index}_{source_name}"
-        payload = upload.file.read()
-        input_path.write_bytes(payload)
+        try:
+            original_size = _save_upload_with_limit(
+                upload=upload,
+                destination=input_path,
+                max_bytes=MAX_FILE_SIZE_BYTES,
+            )
+            _validate_image_payload(input_path)
+        except ValueError as exc:
+            if input_path.exists():
+                input_path.unlink(missing_ok=True)
+            results.append(_build_failed_result(source_name, str(exc)))
+            continue
+        finally:
+            upload.file.close()
 
         try:
             result = optimize_image(
@@ -111,17 +183,15 @@ def optimize_images(
                 allow_format_conversion=False,
             )
             results.append(result)
-        except Exception as exc:  # noqa: BLE001
-            failed = OptimizationResult(
-                input_path=Path(source_name),
-                output_path=None,
-                original_size=input_path.stat().st_size if input_path.exists() else 0,
-                optimized_size=0,
-                compression_percent=0.0,
-                status="failed",
-                message=str(exc),
+        except Exception:  # noqa: BLE001
+            # Keep API errors generic to avoid leaking internals.
+            results.append(
+                _build_failed_result(
+                    source_name,
+                    "Image processing failed.",
+                    original_size=original_size,
+                )
             )
-            results.append(failed)
 
     zip_path = WEB_OUTPUT_DIR / f"{job_id}.zip"
     _build_zip(job_output_dir, zip_path)

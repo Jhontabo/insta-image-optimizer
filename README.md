@@ -48,7 +48,7 @@ insta-image-optimizer/
 ## Installation
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Jhontabo/insta-image-optimizer
 cd insta-image-optimizer
 python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
